@@ -311,7 +311,7 @@ function handlePeerMessage(peer_id, msg) {
 			if(!confirm("You have a call coming in from "+peerName+". Accept Call?")) { 	// Reject Call
 				console.error("Call rejected.");		
 				var r = new XMLHttpRequest();
-				r.open("GET", server + "/WebRTC/server.php?action=reject&peer_id="+myId+"&remote_id=" + peer_id, false);
+				r.open("GET", server + "/server.php?action=reject&peer_id="+myId+"&remote_id=" + peer_id, false);
 				r.send();
 				closeCall();
 				return;
@@ -399,7 +399,7 @@ function startHangingGet() {
     hangingGet.onreadystatechange = hangingGetCallback;
     hangingGet.ontimeout = onHangingGetTimeout;
 	
-    hangingGet.open("GET", server + "/WebRTC/server.php?action=wait&peer_id=" + myId, true);
+    hangingGet.open("GET", server + "/server.php?action=wait&peer_id=" + myId, true);
     hangingGet.send();
   } catch (e) {
     console.error(e, "Start hanging get error");
@@ -416,7 +416,7 @@ function sendToPeer(peer_id, data) {
     return;
   }
   var r = new XMLHttpRequest();
-  r.open("POST", server + "/WebRTC/server.php?action=message&from=" + myId + "&to=" + peer_id, false);
+  r.open("POST", server + "/server.php?action=message&from=" + myId + "&to=" + peer_id, false);
   r.setRequestHeader("Content-type","application/x-www-form-urlencoded");
   r.send("content="+encodeURIComponent(data));
   r = null;
@@ -463,7 +463,7 @@ function signIn() {
   try {
     request = new XMLHttpRequest();
     request.onreadystatechange = signInCallback;
-    request.open("GET", server + "/WebRTC/server.php?action=sign_in&username=" + myName, true);
+    request.open("GET", server + "/server.php?action=sign_in&username=" + myName, true);
     request.send();
   } catch (e) {
     console.error(e, "Start sign in error");
@@ -502,7 +502,7 @@ function disconnect() {
 
   if (myId != -1) {
     request = new XMLHttpRequest();
-    request.open("GET", server + "/WebRTC/server.php?action=sign_out&peer_id=" + myId, false);
+    request.open("GET", server + "/server.php?action=sign_out&peer_id=" + myId, false);
     request.send();
     request = null;
     myId = -1;
@@ -569,7 +569,7 @@ this blog post</a>.
   <tr>
    <td>Server:</td>
    <td>
-    <input type="text" id="server" size="30" value="http://172.16.154.246"/>
+    <input type="text" id="server" size="30" value="http://172.16.154.246/WebRTC"/>
    </td>
   </tr>
   <tr>
