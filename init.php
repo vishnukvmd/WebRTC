@@ -1,7 +1,7 @@
 <?php
-$username = "test";
-$password = "password";
-$database = "test";
+$username = "test";		// Insert Username here
+$password = "password";	// Insert Password here
+$database = "test";		// Insert the name of the Database here
 
 
 $sql_connect = mysql_connect("localhost",$username,$password);
