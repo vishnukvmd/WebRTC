@@ -1,1 +1,12 @@
-WebRTC Application that enables peer-to-peer communication in Talk.to
+============================================================
+ WebRTC Application that enables peer-to-peer communication.
+============================================================
+
+Instructions : 
+* Enter the database and authentication details in `init.php`.
+* To run the application, open up index.html in Chrome Canary(/Dev Channel) [https://tools.google.com/dlpage/chromesxs?platform=win].
+
+To Do :
+* Convert the server-side code from PHP to node.js.
+* Get rid off AJAX Polling using Web Sockets.
+* And last but not definitely the least, tidy up the JS code and make the page prettier.
