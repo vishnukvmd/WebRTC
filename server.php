@@ -7,6 +7,11 @@ $action = $_GET["action"];
 
 if($action == "sign_in") {	// When a user signs in
 	$username = $_GET["username"];
+	$result = mysql_query("SELECT * FROM users");	// Check if the username already exists
+	$num_rows = mysql_num_rows($result);
+	if($num_rows == 0) {
+		mysql_query("TRUNCATE TABLE messages");
+	}
 	$result = mysql_query("SELECT * FROM users WHERE username='".$username."'");	// Check if the username already exists
 	$num_rows = mysql_num_rows($result);
 	if($num_rows == 1)
@@ -24,7 +29,16 @@ if($action == "sign_in") {	// When a user signs in
 if($action == "sign_out") {	// When a user signs out
 	$peer_id = $_GET["peer_id"];
 	mysql_query("DELETE FROM users WHERE peer_id='".$peer_id."'");	// Delete the user from the 'user' table
+	mysql_query("INSERT INTO `test`.`messages` (`from`, `to`, `content`) VALUES ('".$from."', '".$to."', '".$content."');");	// Insert the data into the 'messages' table
 }
+
+if($action == "reject") {	// When a user rejects a call
+	$remote_id = $_GET["remote_id"];
+	$peer_id = $_GET["peer_id"];
+	$content = "REJECT";
+	mysql_query("INSERT INTO `test`.`messages` (`from`, `to`, `content`) VALUES ('".$peer_id."', '".$remote_id."', '".$content."');");	// Insert the data into the 'messages' table
+}
+
 
 if($action == "message") {	// When a user sends a message
 	$from = $_GET["from"];

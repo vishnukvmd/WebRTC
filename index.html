@@ -296,44 +296,58 @@ function handlePeerMessage(peer_id, msg) {
   // Assuming we receive the message from the peer we want to communicate with.
   // TODO: Only accept messages from peer we communicate with with if call is
   // ongoing.
-  if (msg.search("BYE") == 0) {
+  if (msg == "BYE") {
     // Other side has hung up.
     document.getElementById("hangup").disabled = true;
-    closeCall()
-  } else {
-    if (!pc) {
-      // Other side is calling us, startup
-      if (!setSelectedPeer(peer_id)) {
-        console.warn("Recevied message from unknown peer, ignoring");
-        return;
-      }
-	  
-      if (!storeRemoteInfo())
-        return;
-		
-      document.getElementById("call").disabled = false;
-      document.getElementById("peers").disabled = false;
-	  
-      createPeerConnection();
-	  console.warn("PeerConnectionCreated by handlePeerMessage()");
-      try {
-        pc.processSignalingMessage(msg);
-      } catch (e) {
-        console.error(e, "Process signaling message error");
-      }
-      console.log("Adding stream");
-      pc.addStream(localStream);
-      document.getElementById("hangup").disabled = false;
-    } else {
-      try {
-        pc.processSignalingMessage(msg);
-      } catch (e) {
-        console.error(e, "Process signaling message error");
-      }
-    }
-	
+    closeCall();
+  }
+  else {
+	if (!pc) {
+		  // Other side is calling us, startup
+			if (!setSelectedPeer(peer_id)) {
+			console.warn("Recevied message from unknown peer, ignoring");
+			return;
+			}
+			if(!confirm("You have a call coming in from "+peerName+". Accept Call?")) { 	// Reject Call
+				console.error("Call rejected.");		
+				var r = new XMLHttpRequest();
+				r.open("GET", server + "/WebRTC/server.php?action=reject&peer_id="+myId+"&remote_id=" + peer_id, false);
+				r.send();
+				closeCall();
+				return;
+			}
+			if (!storeRemoteInfo())
+			return;
+			document.getElementById("call").disabled = false;
+			document.getElementById("peers").disabled = false;			  
+			createPeerConnection();
+			console.warn("PeerConnectionCreated by handlePeerMessage()");
+			try {
+			pc.processSignalingMessage(msg);
+			} catch (e) {
+			console.error(e, "Process signaling message error");
+			}
+			console.log("Adding stream");
+			pc.addStream(localStream);			
+			document.getElementById("hangup").disabled = false;
+	}
+	else {
+		if (msg == "REJECT") {	// The other side has rejected the call
+			alert("The peer has rejected your call!");
+			console.log("The peer rejected the call");
+			document.getElementById("hangup").disabled = true;
+			closeCall();
+			return;
+		}
+	  try {
+		pc.processSignalingMessage(msg);
+	  } catch (e) {
+		console.error(e, "Process signaling message error");
+	  }
+	}
   }
 }
+
 
 function getIntHeader(r, name) {
   var val = r.getResponseHeader(name);
@@ -385,7 +399,7 @@ function startHangingGet() {
     hangingGet.onreadystatechange = hangingGetCallback;
     hangingGet.ontimeout = onHangingGetTimeout;
 	
-    hangingGet.open("GET", server + "/test/server.php?action=wait&peer_id=" + myId, true);
+    hangingGet.open("GET", server + "/WebRTC/server.php?action=wait&peer_id=" + myId, true);
     hangingGet.send();
   } catch (e) {
     console.error(e, "Start hanging get error");
@@ -402,7 +416,7 @@ function sendToPeer(peer_id, data) {
     return;
   }
   var r = new XMLHttpRequest();
-  r.open("POST", server + "/test/server.php?action=message&from=" + myId + "&to=" + peer_id, false);
+  r.open("POST", server + "/WebRTC/server.php?action=message&from=" + myId + "&to=" + peer_id, false);
   r.setRequestHeader("Content-type","application/x-www-form-urlencoded");
   r.send("content="+encodeURIComponent(data));
   r = null;
@@ -449,7 +463,7 @@ function signIn() {
   try {
     request = new XMLHttpRequest();
     request.onreadystatechange = signInCallback;
-    request.open("GET", server + "/test/server.php?action=sign_in&username=" + myName, true);
+    request.open("GET", server + "/WebRTC/server.php?action=sign_in&username=" + myName, true);
     request.send();
   } catch (e) {
     console.error(e, "Start sign in error");
@@ -488,7 +502,7 @@ function disconnect() {
 
   if (myId != -1) {
     request = new XMLHttpRequest();
-    request.open("GET", server + "/test/server.php?action=sign_out&peer_id=" + myId, false);
+    request.open("GET", server + "/WebRTC/server.php?action=sign_out&peer_id=" + myId, false);
     request.send();
     request = null;
     myId = -1;
