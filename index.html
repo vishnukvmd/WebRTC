@@ -26,25 +26,35 @@ body, input:enable, button:enable, select:enable, table {
 h1 {font-size: 40 px;}
 </style>
 
+
+<script src="http://172.16.154.246:8080/socket.io/socket.io.js"></script>
 <script type="text/javascript">
 
 // TODO: Catch more exceptions
 
-var server;
+var server='http://172.16.154.246:8080';
 var myId = -1;
 var myName;
 var remoteId = -1;
 var remoteName;
 var request = null;
-var hangingGetCount = 0;
 var hangingGet = [];
 var pc = [];
 var localStream = null;
 var disconnecting = false;
 var callState = 0; // 0 - Not started, 1 - Call ongoing
 var autoCallTries = 0;
+var socket = io.connect(server);
 
-// General
+function getUserMedia() {
+  try {
+    navigator.webkitGetUserMedia({audio:true, video:true}, gotStream, gotStreamFailed);
+    console.log("Requested access to local media");
+  } catch (e) {
+    console.error(e, "getUserMedia error");
+  }
+}
+
 
 function setCallState(state) {
   console.log("Changing call state: " + callState + " -> " + state);
@@ -66,14 +76,6 @@ function gotStreamFailed(error) {
   console.warn("Failed to get access to local media. ", error);
 }
 
-function getUserMedia() {
-  try {
-    navigator.webkitGetUserMedia({audio:true, video:true}, gotStream, gotStreamFailed);
-    console.log("Requested access to local media");
-  } catch (e) {
-    console.error(e, "getUserMedia error");
-  }
-}
 
 
 // Peer list and remote peer handling
@@ -91,17 +93,6 @@ function peerExists(id) {
   return false;
 }
 
-function addPeer(id, pname) {
-  try {
-    var peerList = document.getElementById("peers");
-    var option = document.createElement("option");
-    option.text = pname;
-    option.value = id;
-    peerList.add(option);
-  } catch (e) {
-    console.error(e, "Error adding peer");
-  }
-}
 
 function removePeer(id) {
   try {
@@ -260,218 +251,28 @@ function onRemoveStream(e) {
 }
 
 
-// TODO: Add callbacks onconnecting, onopen and onstatechange.
-
-
-// Server interaction
-
-function handleServerNotification(data) {  
-  var parsed = data.split(",");
-  if (parseInt(parsed[2]) == 1) { // New peer
-    var peerId = parseInt(parsed[1]);
-    if (!peerExists(peerId)) {
-      var peerList = document.getElementById("peers");
-      if (peerList.length == 1 && peerList.options[0].value == -1)
-        clearPeerList();
-      addPeer(peerId, parsed[0]);
-      document.getElementById("peers").disabled = false;
-      document.getElementById("call").disabled = false;
-    }
-  } else if (parseInt(parsed[2]) == 0) { // Removed peer
-    removePeer(parseInt(parsed[1]));
-    if (document.getElementById("peers").length == 0) {
-      document.getElementById("peers").disabled = true;
-      addPeer(-1, "No other peer connected");
-    }
-  }
-}
-
-function handlePeerMessage(peer_id, msg) {
-  var peerName = getPeerName(peer_id);
-  if (peerName == undefined) {
-    //console.warn("Received message from unknown peer (ID " + peer_id +"), ignoring message:", msg);
-    return;
-  }
-  if(msg!="")
-	console.log("Received message from " + peerName + " (ID " + peer_id + "):\n" + msg);
-  // Assuming we receive the message from the peer we want to communicate with.
-  // TODO: Only accept messages from peer we communicate with with if call is
-  // ongoing.
-  if (msg == "BYE") {
-    // Other side has hung up.
-    document.getElementById("hangup").disabled = true;
-    closeCall(peer_id);
-  }
-  else {
-	if (!pc[peer_id]) {
-			if (!setSelectedPeer(peer_id)) {
-		  // Other side is calling us, startup
-			console.warn("Recevied message from unknown peer, ignoring");
-			return;
-			}
-			if(!confirm("You have a call coming in from "+peerName+". Accept Call?")) { 	// Reject Call
-				console.error("Call rejected.");		
-				var r = new XMLHttpRequest();
-				r.open("GET", server + "/server.php?action=reject&peer_id="+myId+"&remote_id=" + peer_id, false);
-				r.send();
-				return;
-			}
-			if (!storeRemoteInfo())
-			return;
-			document.getElementById("call").disabled = false;
-			document.getElementById("peers").disabled = false;			  
-			createPeerConnection(peer_id);
-			console.warn("PeerConnectionCreated by handlePeerMessage()");
-			try {
-				pc[peer_id].processSignalingMessage(msg);
-			} catch (e) {
-				console.error(e, "Process signaling message error");
-			}
-			console.log("Adding stream");
-			pc[peer_id].addStream(localStream);			
-			document.getElementById("hangup").disabled = false;
+fetchUserlist = function(my_id, peers) {
+	myId = my_id;
+	console.log("My id: " + myId);
+	clearPeerList();
+	var added = 0;
+	for (var i = 0; i < peers.length; ++i) {
+	  if (peers[i].length > 0 && i!=myId) {		
+		console.log("Peer " + i + ": " + peers[i]);
+		addPeer(i, peers[i]);
+		++added;
+	  }
+	}
+	if (added == 0) {
+	  addPeer(-1, "No other peer connected");
+	  document.getElementById("peers").disabled = true;
 	}
 	else {
-		if (msg == "REJECT") {	// The other side has rejected the call
-			alert("The peer has rejected your call!");
-			console.log("The peer rejected the call");
-			document.getElementById("hangup").disabled = true;
-			closeCall(peer_id);
-			return;
-		}
-	  try {
-		alert("Received Message : "+msg);
-		pc[peer_id].processSignalingMessage(msg);
-	  } catch (e) {
-		console.error(e, "Process signaling message error");
-	  }
+	  document.getElementById("peers").disabled = false;
+	  document.getElementById("call").disabled = false;
 	}
-  }
-}
-
-
-function getIntHeader(r, name) {
-  var val = r.getResponseHeader(name);
-  //console.log("header value: " + val);
-  return val != null && val.length ? parseInt(val) : -1;
-}
-
-function startHangingGet(hangingGetCount) {
-  try {
-  
-  
-  function hangingGetCallback() {
-  try {
-	if (hangingGet[hangingGetCount].readyState != 4 || disconnecting)
-      return;
-	if (hangingGet[hangingGetCount].status != 200) {
-      console.warn("server error, status: " + hangingGet[hangingGetCount].status + ", text: " +
-        hangingGet[hangingGetCount].statusText, hangingGet[hangingGetCount]);
-      //disconnect();
-    } else {
-      var peer_id = getIntHeader(hangingGet[hangingGetCount], "Pragma");	  
-      if (peer_id == myId) {
-        handleServerNotification(hangingGet[hangingGetCount].responseText);
-	  } else {	        
-		handlePeerMessage(peer_id, hangingGet[hangingGetCount].responseText);
-	  }
-    }
-
-    if (hangingGet[hangingGetCount]) {
-      hangingGet[hangingGetCount].abort();
-      hangingGet[hangingGetCount] = null;
-    }
-
-    if (myId != -1) {
-      window.setTimeout(function() { startHangingGet(hangingGetCount); }, 0);
-	 }
-  } catch (e) {
-    console.error(e, "Hanging get error");
-  }
-}  
-
-	function onHangingGetTimeout(hangingGetCount) {
-		console.log("hanging get timeout. issuing again");
-		hangingGet[hangingGetCount].abort();
-		hangingGet[hangingGetCount] = null;
-		if (myId != -1)
-			window.setTimeout(startHangingGet(hangingGetCount), 0);
-	}
-  
-    hangingGet[hangingGetCount] = new XMLHttpRequest();
-    hangingGet[hangingGetCount].onreadystatechange = hangingGetCallback;
-    hangingGet[hangingGetCount].ontimeout = onHangingGetTimeout;
-	
-    hangingGet[hangingGetCount].open("GET", server + "/server.php?action=wait&peer_id=" + myId, true);
-    hangingGet[hangingGetCount].send();
-  } catch (e) {
-    console.error(e, "Start hanging get error");
-  }
-}
-
-function sendToPeer(peer_id, data) {
-  if (myId == -1 || peer_id == -1) {
-    alert("Not connected.");
-    return;
-  }
-  if (peer_id == myId) {
-    alert("Can't send a message to oneself.");
-    return;
-  }
-  var r = new XMLHttpRequest();
-  r.open("POST", server + "/server.php?action=message&from=" + myId + "&to=" + peer_id, false);
-  r.setRequestHeader("Content-type","application/x-www-form-urlencoded");
-  r.send("content="+encodeURIComponent(data));
-  r = null;
-}
-
-function signInCallback() {
-  try {
-    if (request.readyState == 4) {
-      if (request.status == 200) {
-		var peers = request.responseText.split(",");
-        myId = parseInt(peers[0].split(":")[1]);
-        console.log("My id: " + myId);
-        clearPeerList();
-        var added = 0;
-        for (var i = 1; i < peers.length; ++i) {
-          if (peers[i].length > 0) {
-            console.log("Peer " + i + ": " + peers[i]);
-            var parsed = peers[i].split(":");
-            addPeer(parseInt(parsed[1]), parsed[0]);
-            ++added;
-          }
-        }
-        if (added == 0) {
-		  addPeer(-1, "No other peer connected");
-		  document.getElementById("peers").disabled = true;
-		}
-        else {
-          document.getElementById("peers").disabled = false;
-          document.getElementById("call").disabled = false;
-        }
-        startHangingGet(hangingGetCount);
-        request = null;
-        document.getElementById("connect").disabled = true;
-        document.getElementById("disconnect").disabled = false;
-      }
-    }
-  } catch (e) {
-    console.error(e, "Sign in error");
-    document.getElementById("connect").disabled = false;
-  }
-}
-
-function signIn() {
-  try {
-    request = new XMLHttpRequest();
-    request.onreadystatechange = signInCallback;
-    request.open("GET", server + "/server.php?action=sign_in&username=" + myName, true);
-    request.send();
-  } catch (e) {
-    console.error(e, "Start sign in error");
-    document.getElementById("connect").disabled = false;
-  }
+	document.getElementById("connect").disabled = true;
+	document.getElementById("disconnect").disabled = false;
 }
 
 function connect() {
@@ -487,30 +288,93 @@ function connect() {
   }
 }
 
+
+socket.on('connect', function () {
+
+socket.on('error',function(error) {
+	alert(error);
+});
+
+// General
+addPeer = function (id, pname) {
+  try {
+	if(id == myId) return;
+    var peerList = document.getElementById("peers");
+    var option = document.createElement("option");
+    option.text = pname;
+    option.value = id;
+    peerList.add(option);
+  } catch (e) {
+    console.error(e, "Error adding peer");
+  }
+}
+
+socket.on('addPeer', function(my_id, userList) {
+	fetchUserlist(my_id, userList);
+});
+
+// TODO: Add callbacks onconnecting, onopen and onstatechange.
+
+
+// Server interaction
+
+socket.on('receiveMessage', function(remoteId, content) {
+	var peerName = getPeerName(remoteId);
+	if(!pc[remoteId]) {
+		if(!setSelectedPeer(remoteId)) {
+			console.warn("Received message from unknown peer, ignoring...");
+			return;
+		}
+		if(!confirm("You have a call coming in from "+peerName+". Accept Call?")) { 	// Reject Call
+			socket.emit('reject', myId, remoteId);
+			console.error("Call Rejected!");
+		}
+		if (!storeRemoteInfo())
+			return;
+		document.getElementById("call").disabled = false;
+		document.getElementById("peers").disabled = false;			  
+		createPeerConnection(remoteId);
+		console.warn("PeerConnectionCreated by handlePeerMessage()");
+		try {
+			pc[remoteId].processSignalingMessage(content);
+		}
+		catch(e) {
+			console.error(e, "Process signaling message error");
+		}
+		console.log("Adding Stream");
+		pc[remoteId].addStream(localStream);
+		document.getElementById("hangup").disabled = false;			
+	}
+	else {
+		if(content == 'REJECT') {
+			alert("The peer has rejected your call!");
+			console.log("The peer rejected the call");
+			document.getElementById("hangup").disabled = true;
+			closeCall(remoteid);
+			return;
+		}
+		try {			
+			pc[remoteId].processSignalingMessage(content);
+		} catch (e) {
+		console.error(e, "Process signaling message error");
+		}
+	}
+});
+
+sendToPeer = function(peer_id, data) {
+	socket.emit('sendMessage',myId, peer_id, data);
+}
+signIn = function() {
+	socket.emit('signIn', myName);
+	socket.on('ready', function(my_id, userList) {
+		fetchUserlist(my_id, userList);
+	});
+}
+
 function disconnect() {
   if (callState == 1)
     hangUp();
-
   disconnecting = true;
-
-  if (request) {
-    request.abort();
-    request = null;
-  }
-
-  if (hangingGet) {
-    hangingGet.abort();
-    hangingGet = null;
-  }
-
-  if (myId != -1) {
-    request = new XMLHttpRequest();
-    request.open("GET", server + "/server.php?action=sign_out&peer_id=" + myId, false);
-    request.send();
-    request = null;
-    myId = -1;
-  }
-
   clearPeerList();
   addPeer(-1, "Not connected");
   document.getElementById("connect").disabled = false;
@@ -521,17 +385,20 @@ function disconnect() {
   disconnecting = false;
 }
 
+});
 
 // Window event handling
-
 window.onload = function() {
   if (navigator.webkitGetUserMedia) {
     document.getElementById('testApp').hidden = false;
-    getUserMedia();
+	getUserMedia();
+
   } else {
     document.getElementById('errorText').hidden = false;
   }
 }
+
+
 
 //window.onbeforeunload = disconnect();
 
@@ -563,7 +430,7 @@ Local Preview :
   <tr>
    <td>Server:</td>
    <td>
-    <input type="text" id="server" size="30" value="http://172.16.154.246/WebRTC"/>
+    <input type="text" id="server" size="30" value="http://172.16.154.246:8080"/>
    </td>
   </tr>
   <tr>
