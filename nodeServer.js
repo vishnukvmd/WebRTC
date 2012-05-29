@@ -36,7 +36,15 @@ io.sockets.on('connection', function (socket) {
 	
 	socket.on('disconnect', function () {
 		for(var i=0;i<socketList.length;i++)
-			if(socket==socketList[i]) { socketList[i]=-1; console.log(i+"th User Deleted!"); break; }
+			if(socket==socketList[i]) { 
+				userList[i]=-1; 
+				console.log(i+"th User Deleted!"); 
+				for(var j=0;j<counter;j++) {
+					if(userList[j]!=-1)
+						socketList[j].emit('addPeer', j, userList);
+				}
+				break; 
+			}
 	});
 
 });
