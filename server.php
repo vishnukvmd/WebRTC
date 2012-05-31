@@ -49,26 +49,24 @@ if($action == "message") {	// When a user sends a message
 
 if($action == "wait") {	// When a user issues a 'wait'
 	$peer_id = $_GET["peer_id"];
-	$result = mysql_query("SELECT *  FROM `messages`");	// Check if there any messages have been issued so far
+	$result = mysql_query("SELECT *  FROM `messages` WHERE `to` LIKE '".$peer_id."'");	// Check if there any messages have been issued so far
 	if(!$result) { die(mysql_error()); }
 	$num_rows = mysql_num_rows($result);
 	if($num_rows < 1) {	// If not
 		header('Pragma: '.$peer_id);	// Set the 'Pragma' to the peerId of the user who issued the request
-		$result = mysql_query("SELECT * FROM users ORDER BY  `users`.`peer_id` DESC");
-		if(!$result) { die(mysql_error()); }
-		while($row = mysql_fetch_array($result)) {	// Send the list of users who have connected after him
+		$result2 = mysql_query("SELECT * FROM users ORDER BY  `users`.`peer_id` DESC");
+		if(!$result2) { die(mysql_error()); }
+		while($row = mysql_fetch_array($result2)) {	// Send the list of users who have connected after him
 			if($row['peer_id'] > $peer_id) {
 				echo $row['username'].','.$row['peer_id'].',1';
 			}
 		}
 	}
 	else {	// If there have been messages
-		$result = mysql_query("SELECT *  FROM `messages` WHERE `to` LIKE '".$peer_id."'");
-		if(!$result) { die(mysql_error()); }
 		while($row = mysql_fetch_array($result)) {	// Send them to the client who requested them
 			header('Pragma: '.$row['from']);
-			echo $row['content'];
-			mysql_query("DELETE FROM messages WHERE `id` LIKE '".$row['id']."'");
+			echo $row['content'];			
+			mysql_query("DELETE FROM `messages` WHERE `id` LIKE '".$row['id']."'");
 		}
 	}
 	
